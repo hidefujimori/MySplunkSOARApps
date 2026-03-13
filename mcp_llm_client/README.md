@@ -1,75 +1,92 @@
 # MCP LLM Client - Splunk SOAR App (PoC)
 
-MCPサーバー（例: Splunk MCP Server）に接続し、ユーザーのプロンプトを
-設定可能なLLMプロバイダーにルーティングするSplunk SOAR Appです。
+A Splunk SOAR App that connects to an MCP Server (e.g. Splunk MCP Server) and routes user prompts to a configurable LLM provider.
 
-## ファイル構成
+## File Structure
 
 ```
 mcp_llm_client/
 ├── __init__.py
-├── mcp_llm_client.json          # Appメタデータ (app JSON)
-├── mcp_llm_client_connector.py  # メインConnectorモジュール
-├── mcp_client.py                # MCPクライアント (JSON-RPC 2.0)
-├── llm_providers.py             # LLMプロバイダー抽象化レイヤー
-├── mcp_llm_client.svg           # ロゴ (ライト)
-└── mcp_llm_client_dark.svg      # ロゴ (ダーク)
+├── mcp_llm_client.json          # App metadata (app JSON)
+├── mcp_llm_client_connector.py  # Main Connector module
+├── mcp_client.py                # MCP client (JSON-RPC 2.0)
+├── llm_providers.py             # LLM provider abstraction layer
+├── mcp_llm_client.svg           # Logo (light)
+└── mcp_llm_client_dark.svg      # Logo (dark)
 ```
 
-## インストール方法
+## Installation
 
 ```bash
-# TAR.GZアーカイブを作成
+# Create TAR.GZ archive
 tar -zcvf mcp_llm_client.tgz mcp_llm_client/
 ```
 
-作成した `.tgz` ファイルをSOARの「Apps」ページからインポートします。
+Import the generated `.tgz` file from the **Apps** page in Splunk SOAR.
 
 ## Asset Configuration
 
-| パラメータ | 必須 | 説明 |
+| Parameter | Required | Description |
 |---|---|---|
-| mcp_server_url | ✅ | MCPサーバーのURL (例: https://splunk-mcp:8000) |
-| mcp_server_token | - | Bearer認証トークン（必要な場合） |
+| mcp_server_url | ✅ | MCP Server URL (e.g. https://splunk-mcp:8000) |
+| mcp_server_token | - | Bearer token for MCP Server authentication (if required) |
 | llm_provider | ✅ | anthropic / openai / gemini / azure_openai |
-| llm_api_key | ✅ | 選択したプロバイダーのAPIキー |
-| llm_model | ✅ | モデル名 (例: claude-sonnet-4-20250514) |
-| llm_api_base_url | - | Azure OpenAI使用時のベースURL |
-| max_tokens | - | 最大トークン数 (デフォルト: 1024) |
-| request_timeout | - | HTTPタイムアウト秒 (デフォルト: 60) |
+| llm_api_key | ✅ | API key for the selected LLM provider |
+| llm_model | ✅ | Model name (e.g. claude-sonnet-4-20250514) |
+| llm_api_base_url | - | Custom base URL (required for Azure OpenAI) |
+| max_tokens | - | Maximum tokens in LLM response (default: 1024) |
+| request_timeout | - | HTTP timeout in seconds (default: 60) |
+| verify_ssl_mcp | - | Verify SSL certificate for MCP Server (default: true) |
+| verify_ssl_llm | - | Verify SSL certificate for LLM API (default: true) |
 
-## LLMプロバイダー別設定例
+> **Note for PoC environments:** If your MCP Server uses a self-signed certificate, set `verify_ssl_mcp` to `false`.
 
-| Provider | llm_model の例 | llm_api_base_url |
+## LLM Provider Examples
+
+| Provider | llm_model example | llm_api_base_url |
 |---|---|---|
-| anthropic | claude-sonnet-4-20250514 | 不要 |
-| openai | gpt-4o | 不要 |
-| azure_openai | gpt-4o | https://<your>.openai.azure.com/openai/deployments/<deploy>/chat/completions?api-version=2024-02-15-preview |
-| gemini | gemini-1.5-pro | 不要 |
+| anthropic | claude-sonnet-4-20250514 | Not required |
+| openai | gpt-4o | Not required |
+| azure_openai | gpt-4o | https://\<your\>.openai.azure.com/openai/deployments/\<deploy\>/chat/completions?api-version=2024-02-15-preview |
+| gemini | gemini-2.0-flash | Not required |
 
-## 利用可能なActions
+## Available Actions
 
 ### test connectivity
-Asset Configの接続テスト。MCPサーバーへのハンドシェイクと
-ツール一覧の取得を確認します。
+Tests the asset configuration. Verifies the MCP Server handshake and retrieves the list of available tools.
 
 ### send prompt
-プロンプトをLLM経由で送信し応答を取得します。
+Sends a prompt to the LLM via the MCP Server and returns the response.
 
-**パラメータ:**
-- `prompt` (必須): ユーザープロンプト
-- `system_prompt` (任意): システムプロンプト
-- `use_mcp_tools` (任意): MCPツール情報をプロンプトに含める (デフォルト: true)
+**Parameters:**
+- `prompt` (required): User prompt text
+- `system_prompt` (optional): System prompt to guide LLM behavior
+- `use_mcp_tools` (optional): Include available MCP tool context in the prompt (default: true)
+
+**Output fields:**
+- `llm_response`: The LLM's response text
+- `finish_reason`: Reason the LLM stopped generating (`STOP`, `MAX_TOKENS`, `SAFETY`, etc.)
+- `provider`: LLM provider class name
+- `model`: Model identifier used
+- `mcp_tools_available`: Comma-separated list of MCP tools included in context
+
+> **Tip:** If `finish_reason` is `MAX_TOKENS`, increase `max_tokens` in the Asset Config.
 
 ### list mcp tools
-MCPサーバーから利用可能なツール一覧を取得します。
+Retrieves the list of available tools from the MCP Server.
 
-## アーキテクチャ
+## Architecture
 
 ```
 SOAR Playbook
-    ↓ (prompt入力)
+    ↓ (prompt input)
 MCPLLMClientConnector
-    ├─ MCPClient ──→ MCP Server (tools/list, initialize)
-    └─ LLMProvider → LLM API (Anthropic / OpenAI / Gemini)
+    ├─ MCPClient ──→ MCP Server (initialize, tools/list)
+    └─ LLMProvider → LLM API (Anthropic / OpenAI / Gemini / Azure OpenAI)
 ```
+
+## Notes
+
+- MCP tool information is appended to the **user message** (not the system prompt) to avoid `UNEXPECTED_TOOL_CALL` errors with Gemini models.
+- SSL verification can be independently controlled for the MCP Server and LLM API.
+- This app is intended as a Proof of Concept. For production use, review security settings and error handling.
