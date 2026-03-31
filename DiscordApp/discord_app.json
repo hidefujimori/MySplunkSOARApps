@@ -6,7 +6,7 @@
     "publisher": "PoC",
     "type": "information service",
     "main_module": "discord_app_connector.py",
-    "app_version": "1.0.0",
+    "app_version": "1.1.0",
     "product_vendor": "Discord",
     "product_name": "Discord",
     "product_version_regex": ".*",
@@ -99,6 +99,77 @@
                 },
                 {
                     "data_path": "action_result.message",
+                    "data_type": "string"
+                }
+            ],
+            "render": {
+                "type": "table"
+            },
+            "versions": "EQ(*)"
+        },
+        {
+            "action": "get channel id",
+            "description": "List channel IDs and names for a guild, or resolve ID(s) by channel name",
+            "verbose": "GET /guilds/{guild_id}/channels. If channel_name is set, returns only channels whose name matches (case-insensitive). If omitted, returns all channels the bot can see in that guild.",
+            "type": "investigate",
+            "identifier": "get_channel_id",
+            "read_only": true,
+            "parameters": {
+                "guild_id": {
+                    "description": "Discord server (guild) ID — required to list channels",
+                    "data_type": "string",
+                    "required": true,
+                    "primary": true,
+                    "order": 0
+                },
+                "channel_name": {
+                    "description": "If set, filter by this channel name (exact match, case-insensitive). Leave empty to return all channels.",
+                    "data_type": "string",
+                    "required": false,
+                    "order": 1
+                }
+            },
+            "output": [
+                {
+                    "data_path": "action_result.data.*.channel_id",
+                    "data_type": "string",
+                    "column_name": "Channel ID",
+                    "column_order": 0
+                },
+                {
+                    "data_path": "action_result.data.*.channel_name",
+                    "data_type": "string",
+                    "column_name": "Channel Name",
+                    "column_order": 1
+                },
+                {
+                    "data_path": "action_result.data.*.channel_type",
+                    "data_type": "string",
+                    "column_name": "Type",
+                    "column_order": 2
+                },
+                {
+                    "data_path": "action_result.data.*.parent_id",
+                    "data_type": "string",
+                    "column_name": "Parent ID",
+                    "column_order": 3
+                },
+                {
+                    "data_path": "action_result.status",
+                    "data_type": "string",
+                    "column_name": "Status",
+                    "column_order": 4
+                },
+                {
+                    "data_path": "action_result.message",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.channel_count",
+                    "data_type": "numeric"
+                },
+                {
+                    "data_path": "action_result.summary.guild_id",
                     "data_type": "string"
                 }
             ],

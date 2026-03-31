@@ -17,6 +17,50 @@ from phantom.app import BaseConnector
 
 DEFAULT_API_BASE = "https://discord.com/api/v10"
 
+# Discord channel types (subset; see API docs for full list)
+_CHANNEL_TYPE_LABELS = {
+    0: "GUILD_TEXT",
+    1: "DM",
+    2: "GUILD_VOICE",
+    3: "GROUP_DM",
+    4: "GUILD_CATEGORY",
+    5: "GUILD_ANNOUNCEMENT",
+    10: "GUILD_NEWS_THREAD",
+    11: "GUILD_PUBLIC_THREAD",
+    12: "GUILD_PRIVATE_THREAD",
+    13: "GUILD_STAGE_VOICE",
+    15: "GUILD_FORUM",
+    16: "GUILD_MEDIA",
+}
+
+
+def _channel_type_label(type_id):
+    try:
+        tid = int(type_id)
+    except (TypeError, ValueError):
+        return "UNKNOWN"
+    return _CHANNEL_TYPE_LABELS.get(tid, "TYPE_{}".format(tid))
+
+
+def _normalize_bot_token(raw):
+    """
+    Prepare token for Authorization: Bot <token>.
+
+    Common SOAR / copy-paste issues:
+    - Leading/trailing whitespace or newlines
+    - Wrapping quotes
+    - Pasting "Bot <token>" when the connector already adds the Bot prefix
+    """
+    if raw is None:
+        return ""
+    t = str(raw).strip()
+    if len(t) >= 2 and t[0] == t[-1] and t[0] in ('"', "'"):
+        t = t[1:-1].strip()
+    low = t.lower()
+    if low.startswith("bot "):
+        t = t[4:].lstrip()
+    return t
+
 
 class DiscordAppConnector(BaseConnector):
 
@@ -29,11 +73,12 @@ class DiscordAppConnector(BaseConnector):
 
     def initialize(self):
         config = self.get_config()
-        token = (config.get("bot_token") or "").strip()
+        token = _normalize_bot_token(config.get("bot_token"))
         if not token:
             return self.set_status(phantom.APP_ERROR, "bot_token is required")
 
         self._bot_token = token
+        self.debug_print("Bot token length (chars): {}".format(len(token)))
         base = (config.get("api_base_url") or DEFAULT_API_BASE).strip().rstrip("/")
         self._api_base = base or DEFAULT_API_BASE
         self._timeout = int(config.get("request_timeout", 30) or 30)
@@ -54,6 +99,8 @@ class DiscordAppConnector(BaseConnector):
             return self._handle_test_connectivity(param)
         if action_id == "send_message":
             return self._handle_send_message(param)
+        if action_id == "get_channel_id":
+            return self._handle_get_channel_id(param)
 
         return phantom.APP_SUCCESS
 
@@ -138,6 +185,69 @@ class DiscordAppConnector(BaseConnector):
             "channel_id": str(msg.get("channel_id", channel_id)),
         })
         return action_result.set_status(phantom.APP_SUCCESS, "Message sent")
+
+    def _handle_get_channel_id(self, param):
+        action_result = self.add_action_result(ActionResult(dict(param)))
+        guild_id = (param.get("guild_id") or "").strip()
+        if not guild_id:
+            return action_result.set_status(phantom.APP_ERROR, "guild_id is required")
+
+        name_filter = param.get("channel_name")
+        if name_filter is None:
+            name_filter = ""
+        else:
+            name_filter = str(name_filter).strip()
+        filter_lower = name_filter.lower() if name_filter else None
+
+        path = "/guilds/{}/channels".format(guild_id)
+        try:
+            channels = self._request_json("GET", path)
+        except (HTTPError, URLError, ValueError) as e:
+            return action_result.set_status(
+                phantom.APP_ERROR,
+                "Failed to list guild channels: {}".format(self._request_error_message(e)),
+            )
+
+        if not isinstance(channels, list):
+            return action_result.set_status(
+                phantom.APP_ERROR,
+                "Unexpected API response when listing channels",
+            )
+
+        rows = []
+        for ch in channels:
+            cid = ch.get("id")
+            cname = ch.get("name")
+            if cid is None:
+                continue
+            name_str = cname if cname is not None else ""
+            if filter_lower is not None:
+                if name_str.lower() != filter_lower:
+                    continue
+            ctype = ch.get("type")
+            parent = ch.get("parent_id")
+            rows.append({
+                "channel_id": str(cid),
+                "channel_name": name_str,
+                "channel_type": _channel_type_label(ctype),
+                "parent_id": str(parent) if parent is not None else "",
+            })
+
+        rows.sort(key=lambda r: (r["channel_type"], r["channel_name"].lower(), r["channel_id"]))
+
+        for r in rows:
+            action_result.add_data(r)
+
+        action_result.update_summary({
+            "channel_count": len(rows),
+            "guild_id": guild_id,
+        })
+
+        if filter_lower is not None:
+            msg = "Found {} channel(s) matching name".format(len(rows))
+        else:
+            msg = "Retrieved {} channel(s)".format(len(rows))
+        return action_result.set_status(phantom.APP_SUCCESS, msg)
 
 
 if __name__ == "__main__":
