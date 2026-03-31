@@ -19,7 +19,7 @@ Splunk SOAR app for Discord: validates a bot token against the Discord API and s
 
 - **test connectivity** — `GET /users/@me` using the configured token.
 - **send message** — `POST /channels/{channel_id}/messages` with the given text.
-- **get channel id** — `GET /guilds/{guild_id}/channels`. Requires **guild_id** (server ID). Leave **channel_name** empty to list every channel the bot can see; set **channel_name** for a case-insensitive exact name match (all matches returned if duplicates exist). Output includes channel type and parent category ID where applicable.
+- **get channel id** — `GET /guilds/{guild_id}/channels`. Requires **guild_id** (server ID). Optional **channel_name** (case-insensitive exact match) and optional **channel_type** (e.g. `GUILD_TEXT`, `GUILD_VOICE`, `GUILD_CATEGORY`, or a numeric API type). Omit both filters to list all channels; use only **channel_type** to list every channel of that type. If there is no match, or **channel_type** is not a known label/number, the action still succeeds and returns **one data row** with `channel_id`, `channel_name`, `channel_type`, and `parent_id` set to **null** (`None`). Summary includes `matched` (`true` / `false`) and `channel_type_filter` when a type filter was applied.
 
 Server and channel IDs: enable **Developer Mode** in the Discord client (Advanced settings), then right-click the server or channel and **Copy Server ID** / **Copy Channel ID**.
 

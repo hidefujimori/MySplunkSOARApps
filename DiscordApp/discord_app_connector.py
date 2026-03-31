@@ -42,6 +42,48 @@ def _channel_type_label(type_id):
     return _CHANNEL_TYPE_LABELS.get(tid, "TYPE_{}".format(tid))
 
 
+def _resolve_channel_type_filter(raw):
+    """
+    Parse optional channel_type parameter.
+
+    Returns:
+        (None, None) — no type filter (include all types).
+        (int, None) — filter to this Discord API channel type.
+        (None, "unknown") — non-empty input that does not map to a type
+          (treat like no matches; caller returns None row).
+    """
+    if raw is None:
+        return None, None
+    s = str(raw).strip()
+    if not s:
+        return None, None
+    if s.isdigit() or (s[0] == "-" and s[1:].isdigit()):
+        try:
+            return int(s), None
+        except ValueError:
+            return None, "unknown"
+    key = s.upper().replace(" ", "_").replace("-", "_")
+    for tid, label in _CHANNEL_TYPE_LABELS.items():
+        if label.upper() == key:
+            return tid, None
+    if key.startswith("TYPE_"):
+        suffix = key[5:]
+        if suffix.isdigit() or (suffix.startswith("-") and suffix[1:].isdigit()):
+            try:
+                return int(suffix), None
+            except ValueError:
+                pass
+    return None, "unknown"
+
+
+_NONE_ROW = {
+    "channel_id": None,
+    "channel_name": None,
+    "channel_type": None,
+    "parent_id": None,
+}
+
+
 def _normalize_bot_token(raw):
     """
     Prepare token for Authorization: Bot <token>.
@@ -197,7 +239,14 @@ class DiscordAppConnector(BaseConnector):
             name_filter = ""
         else:
             name_filter = str(name_filter).strip()
-        filter_lower = name_filter.lower() if name_filter else None
+        name_filter_lower = name_filter.lower() if name_filter else None
+        use_name = name_filter_lower is not None
+
+        type_filter_int, type_parse_err = _resolve_channel_type_filter(param.get("channel_type"))
+        use_type = type_filter_int is not None
+        type_filter_label = (
+            _channel_type_label(type_filter_int) if use_type else ""
+        )
 
         path = "/guilds/{}/channels".format(guild_id)
         try:
@@ -215,25 +264,49 @@ class DiscordAppConnector(BaseConnector):
             )
 
         rows = []
-        for ch in channels:
-            cid = ch.get("id")
-            cname = ch.get("name")
-            if cid is None:
-                continue
-            name_str = cname if cname is not None else ""
-            if filter_lower is not None:
-                if name_str.lower() != filter_lower:
+        if type_parse_err is None:
+            for ch in channels:
+                cid = ch.get("id")
+                cname = ch.get("name")
+                if cid is None:
                     continue
-            ctype = ch.get("type")
-            parent = ch.get("parent_id")
-            rows.append({
-                "channel_id": str(cid),
-                "channel_name": name_str,
-                "channel_type": _channel_type_label(ctype),
-                "parent_id": str(parent) if parent is not None else "",
-            })
+                name_str = cname if cname is not None else ""
+                if use_name:
+                    if name_str.lower() != name_filter_lower:
+                        continue
+                ctype = ch.get("type")
+                if use_type:
+                    try:
+                        if int(ctype) != type_filter_int:
+                            continue
+                    except (TypeError, ValueError):
+                        continue
+                parent = ch.get("parent_id")
+                rows.append({
+                    "channel_id": str(cid),
+                    "channel_name": name_str,
+                    "channel_type": _channel_type_label(ctype),
+                    "parent_id": str(parent) if parent is not None else "",
+                })
 
         rows.sort(key=lambda r: (r["channel_type"], r["channel_name"].lower(), r["channel_id"]))
+
+        if not rows:
+            action_result.add_data(dict(_NONE_ROW))
+            summary = {
+                "channel_count": 0,
+                "guild_id": guild_id,
+                "matched": "false",
+                "channel_type_filter": type_filter_label or None,
+            }
+            action_result.update_summary(summary)
+            if type_parse_err:
+                msg = "No match: unknown channel_type value"
+            elif use_name or use_type:
+                msg = "No match: no channels for the given name and/or type (null row returned)"
+            else:
+                msg = "No channels returned by API (null row returned)"
+            return action_result.set_status(phantom.APP_SUCCESS, msg)
 
         for r in rows:
             action_result.add_data(r)
@@ -241,10 +314,17 @@ class DiscordAppConnector(BaseConnector):
         action_result.update_summary({
             "channel_count": len(rows),
             "guild_id": guild_id,
+            "matched": "true",
+            "channel_type_filter": type_filter_label or None,
         })
 
-        if filter_lower is not None:
-            msg = "Found {} channel(s) matching name".format(len(rows))
+        parts = []
+        if use_name:
+            parts.append("name")
+        if use_type:
+            parts.append("type")
+        if parts:
+            msg = "Found {} channel(s) matching {}".format(len(rows), " + ".join(parts))
         else:
             msg = "Retrieved {} channel(s)".format(len(rows))
         return action_result.set_status(phantom.APP_SUCCESS, msg)

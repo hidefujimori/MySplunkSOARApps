@@ -6,7 +6,7 @@
     "publisher": "PoC",
     "type": "information service",
     "main_module": "discord_app_connector.py",
-    "app_version": "1.1.0",
+    "app_version": "1.2.0",
     "product_vendor": "Discord",
     "product_name": "Discord",
     "product_version_regex": ".*",
@@ -109,8 +109,8 @@
         },
         {
             "action": "get channel id",
-            "description": "List channel IDs and names for a guild, or resolve ID(s) by channel name",
-            "verbose": "GET /guilds/{guild_id}/channels. If channel_name is set, returns only channels whose name matches (case-insensitive). If omitted, returns all channels the bot can see in that guild.",
+            "description": "List channel IDs and names for a guild; optional filters by name and/or Discord channel type",
+            "verbose": "GET /guilds/{guild_id}/channels. Optional channel_name (exact, case-insensitive) and/or channel_type (e.g. GUILD_TEXT, 0). Omit both filters to list all channels. If channel_type alone is set, list all channels of that type. No matches or unknown channel_type returns a single row with null fields.",
             "type": "investigate",
             "identifier": "get_channel_id",
             "read_only": true,
@@ -123,10 +123,16 @@
                     "order": 0
                 },
                 "channel_name": {
-                    "description": "If set, filter by this channel name (exact match, case-insensitive). Leave empty to return all channels.",
+                    "description": "If set, filter by this channel name (exact match, case-insensitive). Leave empty to ignore.",
                     "data_type": "string",
                     "required": false,
                     "order": 1
+                },
+                "channel_type": {
+                    "description": "If set, filter by Discord channel type (label e.g. GUILD_TEXT, GUILD_VOICE, GUILD_CATEGORY, or numeric API type). Leave empty to include all types.",
+                    "data_type": "string",
+                    "required": false,
+                    "order": 2
                 }
             },
             "output": [
@@ -170,6 +176,14 @@
                 },
                 {
                     "data_path": "action_result.summary.guild_id",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.matched",
+                    "data_type": "string"
+                },
+                {
+                    "data_path": "action_result.summary.channel_type_filter",
                     "data_type": "string"
                 }
             ],
