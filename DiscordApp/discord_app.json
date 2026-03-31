@@ -1,0 +1,111 @@
+{
+    "appid": "b97b9415-0c3f-49f2-beb4-87f79b387728",
+    "name": "Discord App",
+    "package_name": "phantom_discord_app",
+    "description": "Splunk SOAR integration for Discord: verify bot token connectivity and send messages to channels via the Discord REST API.",
+    "publisher": "PoC",
+    "type": "information service",
+    "main_module": "discord_app_connector.py",
+    "app_version": "1.0.0",
+    "product_vendor": "Discord",
+    "product_name": "Discord",
+    "product_version_regex": ".*",
+    "min_phantom_version": "6.0.0",
+    "python_version": "3",
+    "logo": "discord_app.svg",
+    "logo_dark": "discord_app_dark.svg",
+    "license": "Copyright (c) 2026 PoC",
+    "configuration": {
+        "bot_token": {
+            "description": "Discord Bot Token (from Discord Developer Portal)",
+            "data_type": "password",
+            "required": true,
+            "order": 0
+        },
+        "api_base_url": {
+            "description": "Discord API base URL (default: https://discord.com/api/v10)",
+            "data_type": "string",
+            "required": false,
+            "default": "https://discord.com/api/v10",
+            "order": 1
+        },
+        "request_timeout": {
+            "description": "HTTP request timeout in seconds",
+            "data_type": "numeric",
+            "default": 30,
+            "required": false,
+            "order": 2
+        },
+        "verify_ssl": {
+            "description": "Verify SSL certificate for Discord API",
+            "data_type": "boolean",
+            "default": true,
+            "required": false,
+            "order": 3
+        }
+    },
+    "actions": [
+        {
+            "action": "test connectivity",
+            "description": "Validate the asset configuration by calling GET /users/@me",
+            "verbose": "Uses the configured bot token to verify authentication with the Discord API.",
+            "type": "test",
+            "identifier": "test_asset_connectivity",
+            "read_only": true,
+            "parameters": {},
+            "output": [],
+            "versions": "EQ(*)"
+        },
+        {
+            "action": "send message",
+            "description": "Send a text message to a Discord channel",
+            "verbose": "POST /channels/{channel_id}/messages with the provided content.",
+            "type": "generic",
+            "identifier": "send_message",
+            "read_only": false,
+            "parameters": {
+                "channel_id": {
+                    "description": "Discord channel ID (numeric snowflake)",
+                    "data_type": "string",
+                    "required": true,
+                    "primary": true,
+                    "order": 0
+                },
+                "content": {
+                    "description": "Message text (Discord limits apply; max 2000 characters)",
+                    "data_type": "string",
+                    "required": true,
+                    "order": 1
+                }
+            },
+            "output": [
+                {
+                    "data_path": "action_result.data.*.message_id",
+                    "data_type": "string",
+                    "column_name": "Message ID",
+                    "column_order": 0
+                },
+                {
+                    "data_path": "action_result.data.*.channel_id",
+                    "data_type": "string",
+                    "column_name": "Channel ID",
+                    "column_order": 1
+                },
+                {
+                    "data_path": "action_result.status",
+                    "data_type": "string",
+                    "column_name": "Status",
+                    "column_order": 2
+                },
+                {
+                    "data_path": "action_result.message",
+                    "data_type": "string"
+                }
+            ],
+            "render": {
+                "type": "table"
+            },
+            "versions": "EQ(*)"
+        }
+    ]
+}
